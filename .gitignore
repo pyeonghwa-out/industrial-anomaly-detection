@@ -1,0 +1,30 @@
+# ───── Datasets & large downloads (never commit the ~5 GB dataset) ─────
+# Root-anchored so it never matches the src/iad/datasets/ package.
+/data/
+/datasets/
+*.tar.xz
+*.tar.gz
+*.zip
+*.parquet
+
+# ───── Model weights, memory banks, cached features ─────
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.npz
+*.npy
+artifacts/
+checkpoints/
+
+# ───── Benchmark runs are regenerated (keep the folder, drop the contents) ─────
+results/runs/*
+!results/runs/.gitkeep
+results/*.csv
+# NOTE: example figures in results/figures/ are intentionally committed (kept).
+
+# ───── Hugging Face / Torch caches, if ever redirected into the repo ─────
+.cache/
+.huggingface/
+
+# ───── Python ─────
