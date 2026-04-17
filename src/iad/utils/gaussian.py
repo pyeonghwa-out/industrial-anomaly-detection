@@ -22,3 +22,28 @@ def _gaussian_kernel1d(sigma: float, truncate: float = 4.0) -> torch.Tensor:
 
 def gaussian_smooth(maps: torch.Tensor, sigma: float = 4.0) -> torch.Tensor:
     """Apply a separable 2D Gaussian blur to a batch of anomaly maps.
+
+    Args:
+        maps: Tensor of shape ``(B, H, W)`` or ``(B, 1, H, W)``.
+        sigma: Standard deviation in pixels.
+
+    Returns:
+        Smoothed maps with the same shape as the input.
+    """
+    squeeze_back = False
+    if maps.dim() == 3:
+        maps = maps.unsqueeze(1)
+        squeeze_back = True
+
+    kernel = _gaussian_kernel1d(sigma).to(maps.device, maps.dtype)
+    radius = kernel.numel() // 2
+
+    kx = kernel.view(1, 1, 1, -1)
+    ky = kernel.view(1, 1, -1, 1)
+
+    maps = F.pad(maps, (radius, radius, 0, 0), mode="reflect")
+    maps = F.conv2d(maps, kx)
+    maps = F.pad(maps, (0, 0, radius, radius), mode="reflect")
+    maps = F.conv2d(maps, ky)
+
+    return maps.squeeze(1) if squeeze_back else maps
