@@ -50,3 +50,30 @@ class KCenterGreedy:
         """
         n = features.shape[0]
         n_select = max(1, int(round(n * ratio)))
+        if n_select >= n:
+            return torch.arange(n, device=features.device)
+
+        proj = self._project(features)
+
+        generator = torch.Generator(device="cpu").manual_seed(self.seed)
+        start = int(torch.randint(0, n, (1,), generator=generator).item())
+
+        selected = torch.empty(n_select, dtype=torch.long, device=features.device)
+        selected[0] = start
+        # Distance from every point to the nearest selected centre so far.
+        min_dist = torch.cdist(proj, proj[start : start + 1]).squeeze(1)
+
+        # The greedy loop is the slow part on CPU; show progress so it never
+        # looks like the run has hung.
+        iterator = tqdm(
+            range(1, n_select),
+            desc=f"Coreset ({ratio:.0%}, {n_select}/{n})",
+            leave=False,
+        )
+        for i in iterator:
+            new_idx = int(torch.argmax(min_dist).item())
+            selected[i] = new_idx
+            dist_new = torch.cdist(proj, proj[new_idx : new_idx + 1]).squeeze(1)
+            min_dist = torch.minimum(min_dist, dist_new)
+
+        return selected
