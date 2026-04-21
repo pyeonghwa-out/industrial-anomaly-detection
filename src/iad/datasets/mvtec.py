@@ -39,3 +39,44 @@ MVTEC_OBJECTS: List[str] = [
     "hazelnut",
     "metal_nut",
     "pill",
+    "screw",
+    "toothbrush",
+    "transistor",
+    "zipper",
+]
+MVTEC_CATEGORIES: List[str] = MVTEC_OBJECTS + MVTEC_TEXTURES
+
+# ImageNet normalisation — required because we use frozen ImageNet backbones.
+_IMAGENET_MEAN = (0.485, 0.456, 0.406)
+_IMAGENET_STD = (0.229, 0.224, 0.225)
+
+_IMG_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp")
+
+
+def build_transforms(
+    resize: int = 256, crop: int = 224
+) -> "tuple[transforms.Compose, transforms.Compose]":
+    """Return (image_transform, mask_transform).
+
+    Images are resized then centre-cropped (standard MVTec protocol). The mask
+    uses nearest-neighbour interpolation so it stays binary.
+    """
+    image_tf = transforms.Compose(
+        [
+            transforms.Resize(resize, interpolation=InterpolationMode.BILINEAR),
+            transforms.CenterCrop(crop),
+            transforms.ToTensor(),
+            transforms.Normalize(_IMAGENET_MEAN, _IMAGENET_STD),
+        ]
+    )
+    mask_tf = transforms.Compose(
+        [
+            transforms.Resize(resize, interpolation=InterpolationMode.NEAREST),
+            transforms.CenterCrop(crop),
+            transforms.ToTensor(),
+        ]
+    )
+    return image_tf, mask_tf
+
+
+class MVTecDataset(Dataset):
