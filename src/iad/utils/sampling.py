@@ -24,3 +24,29 @@ class KCenterGreedy:
             reproducible across runs.
     """
 
+    def __init__(self, projection_dim: int | None = 128, seed: int = 42) -> None:
+        self.projection_dim = projection_dim
+        self.seed = seed
+
+    def _project(self, features: torch.Tensor) -> torch.Tensor:
+        if self.projection_dim is None or self.projection_dim >= features.shape[1]:
+            return features
+        generator = torch.Generator(device="cpu").manual_seed(self.seed)
+        proj = torch.randn(
+            features.shape[1], self.projection_dim, generator=generator
+        ) / (self.projection_dim ** 0.5)
+        return features @ proj.to(features.device, features.dtype)
+
+    @torch.no_grad()
+    def sample(self, features: torch.Tensor, ratio: float) -> torch.Tensor:
+        """Return indices of the selected coreset.
+
+        Args:
+            features: ``(N, D)`` patch feature bank.
+            ratio: Fraction of points to keep, in ``(0, 1]``.
+
+        Returns:
+            A 1D LongTensor of selected row indices into ``features``.
+        """
+        n = features.shape[0]
+        n_select = max(1, int(round(n * ratio)))
