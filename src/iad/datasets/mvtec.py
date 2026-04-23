@@ -121,3 +121,45 @@ class MVTecDataset(Dataset):
 
         for defect_dir in sorted(p for p in split_dir.iterdir() if p.is_dir()):
             defect_type = defect_dir.name
+            is_good = defect_type == "good"
+            for img_path in sorted(_iter_images(defect_dir)):
+                self.image_paths.append(img_path)
+                self.labels.append(0 if is_good else 1)
+                self.defect_types.append(defect_type)
+                if is_good:
+                    self.mask_paths.append(None)
+                else:
+                    # MVTec masks are named "<stem>_mask.png".
+                    mask_path = gt_dir / defect_type / f"{img_path.stem}_mask.png"
+                    self.mask_paths.append(mask_path if mask_path.exists() else None)
+
+    # ------------------------------------------------------------------ #
+    def __len__(self) -> int:
+        return len(self.image_paths)
+
+    def __getitem__(self, idx: int) -> Dict[str, object]:
+        img_path = self.image_paths[idx]
+        image = Image.open(img_path).convert("RGB")
+        image = self.image_tf(image)
+
+        mask_path = self.mask_paths[idx]
+        if mask_path is None:
+            mask = torch.zeros(1, self.crop, self.crop)
+        else:
+            mask_img = Image.open(mask_path).convert("L")
+            mask = self.mask_tf(mask_img)
+            mask = (mask > 0.5).float()
+
+        return {
+            "image": image,
+            "label": int(self.labels[idx]),
+            "mask": mask,
+            "defect_type": self.defect_types[idx],
+            "path": str(img_path),
+        }
+
+
+def _iter_images(directory: Path):
+    for path in directory.iterdir():
+        if path.suffix.lower() in _IMG_EXTENSIONS:
+            yield path
