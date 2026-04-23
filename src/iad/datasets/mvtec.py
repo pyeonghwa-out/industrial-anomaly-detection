@@ -80,3 +80,44 @@ def build_transforms(
 
 
 class MVTecDataset(Dataset):
+    """A single MVTec AD category, either the ``train`` or ``test`` split."""
+
+    def __init__(
+        self,
+        root: str | Path,
+        category: str,
+        split: str = "train",
+        resize: int = 256,
+        crop: int = 224,
+    ) -> None:
+        if category not in MVTEC_CATEGORIES:
+            raise ValueError(
+                f"Unknown category '{category}'. Expected one of {MVTEC_CATEGORIES}."
+            )
+        if split not in {"train", "test"}:
+            raise ValueError("split must be 'train' or 'test'.")
+
+        self.root = Path(root)
+        self.category = category
+        self.split = split
+        self.crop = crop
+        self.image_tf, self.mask_tf = build_transforms(resize, crop)
+
+        self.image_paths: List[Path] = []
+        self.mask_paths: List[Optional[Path]] = []
+        self.labels: List[int] = []
+        self.defect_types: List[str] = []
+        self._index()
+
+    # ------------------------------------------------------------------ #
+    def _index(self) -> None:
+        split_dir = self.root / self.category / self.split
+        if not split_dir.is_dir():
+            raise FileNotFoundError(
+                f"Could not find '{split_dir}'. Did you run scripts/download_data.py "
+                f"and pass the correct --root?"
+            )
+        gt_dir = self.root / self.category / "ground_truth"
+
+        for defect_dir in sorted(p for p in split_dir.iterdir() if p.is_dir()):
+            defect_type = defect_dir.name
