@@ -22,3 +22,27 @@ class AnomalyPrediction:
     """Output of a model on a batch of images.
 
     Attributes:
+        image_scores: ``(B,)`` scalar anomaly score per image (higher = more anomalous).
+        anomaly_maps: ``(B, H, W)`` pixel-level anomaly map at input resolution.
+    """
+
+    image_scores: torch.Tensor
+    anomaly_maps: torch.Tensor
+
+
+class AnomalyModel(abc.ABC):
+    """Abstract base class for all anomaly detectors."""
+
+    name: str = "base"
+
+    @abc.abstractmethod
+    def fit(self, train_loader: DataLoader) -> "AnomalyModel":
+        """Build the reference from defect-free training images. Returns self."""
+
+    @abc.abstractmethod
+    def predict(self, images: torch.Tensor) -> AnomalyPrediction:
+        """Score a batch of images already moved to the model's device."""
+
+    def to(self, device: str | torch.device) -> "AnomalyModel":  # pragma: no cover
+        self.device = torch.device(device)
+        return self
