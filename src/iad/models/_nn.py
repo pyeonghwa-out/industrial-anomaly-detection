@@ -25,3 +25,30 @@ class NearestNeighbors:
         if _HAS_FAISS:
             self._index = faiss.IndexFlatL2(self.dim)
             self._index.add(bank.detach().cpu().numpy().astype("float32"))
+            self._bank = None
+        else:
+            self._index = None
+            self._bank = bank.detach()
+
+    def search(self, queries: torch.Tensor, k: int = 1):
+        """Return ``(distances, indices)`` of the ``k`` nearest neighbours.
+
+        Distances are Euclidean (not squared). Shapes: ``(Q, k)`` each.
+        """
+        if self._index is not None:
+            sq_dist, idx = self._index.search(
+                queries.detach().cpu().numpy().astype("float32"), k
+            )
+            dist = torch.from_numpy(sq_dist).clamp_min(0.0).sqrt()
+            return dist, torch.from_numpy(idx).long()
+
+        # Torch fallback: chunked to bound memory.
+        bank = self._bank.to(queries.device)
+        all_dist, all_idx = [], []
+        for start in range(0, queries.shape[0], self.chunk):
+            block = queries[start : start + self.chunk]
+            d = torch.cdist(block, bank)  # (chunk, M)
+            dist, idx = d.topk(k, dim=1, largest=False)
+            all_dist.append(dist)
+            all_idx.append(idx)
+        return torch.cat(all_dist, 0), torch.cat(all_idx, 0)
