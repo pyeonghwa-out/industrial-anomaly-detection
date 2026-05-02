@@ -30,3 +30,35 @@ class FeatureExtractor(nn.Module):
         pretrained: Load ImageNet weights (always True in practice; exposed for
             fast unit tests that want random weights).
     """
+
+    def __init__(
+        self,
+        backbone: str = "wide_resnet50_2",
+        layers: List[str] | None = None,
+        pretrained: bool = True,
+    ) -> None:
+        super().__init__()
+        if backbone not in _BACKBONES:
+            raise ValueError(
+                f"Unsupported backbone '{backbone}'. Choose from {list(_BACKBONES)}."
+            )
+        self.backbone_name = backbone
+        self.layers = layers or ["layer2", "layer3"]
+
+        ctor, weights_enum_name = _BACKBONES[backbone]
+        weights = None
+        if pretrained:
+            weights = getattr(models, weights_enum_name).IMAGENET1K_V1
+        self.backbone = ctor(weights=weights)
+
+        # Freeze: eval mode + no grad. This is what makes the methods
+        # "training-free" — the backbone is never updated.
+        self.backbone.eval()
+        for param in self.backbone.parameters():
+            param.requires_grad_(False)
+
+        self._features: Dict[str, torch.Tensor] = {}
+        self._register_hooks()
+
+    def _register_hooks(self) -> None:
+        for name in self.layers:
