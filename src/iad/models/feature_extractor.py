@@ -62,3 +62,35 @@ class FeatureExtractor(nn.Module):
 
     def _register_hooks(self) -> None:
         for name in self.layers:
+            module = getattr(self.backbone, name, None)
+            if module is None:
+                raise ValueError(f"Backbone has no layer '{name}'.")
+            module.register_forward_hook(self._make_hook(name))
+
+    def _make_hook(self, name: str):
+        def hook(_module, _inp, output) -> None:
+            self._features[name] = output
+
+        return hook
+
+    @torch.no_grad()
+    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """Return ``{layer_name: feature_map (B, C, H, W)}`` for the input batch."""
+        self._features = {}
+        self.backbone(x)
+        return {name: self._features[name] for name in self.layers}
+
+    @property
+    def channels(self) -> Dict[str, int]:
+        """Number of channels produced by each tapped layer."""
+        dims = {
+            "resnet18": {"layer1": 64, "layer2": 128, "layer3": 256, "layer4": 512},
+            "resnet50": {"layer1": 256, "layer2": 512, "layer3": 1024, "layer4": 2048},
+            "wide_resnet50_2": {
+                "layer1": 256,
+                "layer2": 512,
+                "layer3": 1024,
+                "layer4": 2048,
+            },
+        }[self.backbone_name]
+        return {name: dims[name] for name in self.layers}
