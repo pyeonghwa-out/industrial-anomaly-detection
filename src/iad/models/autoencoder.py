@@ -27,3 +27,32 @@ class _Encoder(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(3, 32, 4, 2, 1), nn.BatchNorm2d(32), nn.ReLU(True),     # 112
+            nn.Conv2d(32, 64, 4, 2, 1), nn.BatchNorm2d(64), nn.ReLU(True),    # 56
+            nn.Conv2d(64, 128, 4, 2, 1), nn.BatchNorm2d(128), nn.ReLU(True),  # 28
+            nn.Conv2d(128, 256, 4, 2, 1), nn.BatchNorm2d(256), nn.ReLU(True), # 14
+            nn.Conv2d(256, latent, 4, 2, 1),                                  # 7
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class _Decoder(nn.Module):
+    def __init__(self, latent: int = 100) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.ConvTranspose2d(latent, 256, 4, 2, 1), nn.BatchNorm2d(256), nn.ReLU(True),
+            nn.ConvTranspose2d(256, 128, 4, 2, 1), nn.BatchNorm2d(128), nn.ReLU(True),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1), nn.BatchNorm2d(64), nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1), nn.BatchNorm2d(32), nn.ReLU(True),
+            nn.ConvTranspose2d(32, 3, 4, 2, 1),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class ConvAutoencoder(AnomalyModel):
+    name = "autoencoder"
+
+    def __init__(
