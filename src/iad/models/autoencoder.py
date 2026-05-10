@@ -56,3 +56,32 @@ class ConvAutoencoder(AnomalyModel):
     name = "autoencoder"
 
     def __init__(
+        self,
+        latent: int = 100,
+        epochs: int = 50,
+        lr: float = 2e-3,
+        image_size: int = 224,
+        sigma: float = 4.0,
+        device: str = "cuda",
+        seed: int = 42,
+    ) -> None:
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        self.encoder = _Encoder(latent).to(self.device)
+        self.decoder = _Decoder(latent).to(self.device)
+        self.epochs = epochs
+        self.lr = lr
+        self.image_size = image_size
+        self.sigma = sigma
+        self.seed = seed
+
+    # ------------------------------------------------------------------ #
+    def fit(self, train_loader: DataLoader) -> "ConvAutoencoder":
+        params = list(self.encoder.parameters()) + list(self.decoder.parameters())
+        optimizer = torch.optim.Adam(params, lr=self.lr)
+        self.encoder.train()
+        self.decoder.train()
+        for epoch in range(self.epochs):
+            running = 0.0
+            for batch in tqdm(
+                train_loader, desc=f"AE epoch {epoch + 1}/{self.epochs}", leave=False
+            ):
