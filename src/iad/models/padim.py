@@ -33,3 +33,39 @@ from .feature_extractor import FeatureExtractor
 # Default number of randomly-kept channels per backbone (from the paper /
 # the widely-used anomalib defaults).
 _DEFAULT_N_DIMS = {
+    "resnet18": 100,
+    "resnet50": 550,
+    "wide_resnet50_2": 550,
+}
+
+
+class PaDiM(AnomalyModel):
+    name = "padim"
+
+    def __init__(
+        self,
+        backbone: str = "wide_resnet50_2",
+        layers: List[str] | None = None,
+        n_dims: int | None = None,
+        image_size: int = 224,
+        sigma: float = 4.0,
+        epsilon: float = 0.01,
+        device: str = "cuda",
+        seed: int = 42,
+        pretrained: bool = True,
+    ) -> None:
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        layers = layers or ["layer1", "layer2", "layer3"]
+        self.extractor = FeatureExtractor(backbone, layers, pretrained=pretrained).to(self.device)
+        self.layers = layers
+        self.image_size = image_size
+        self.sigma = sigma
+        self.epsilon = epsilon
+        self.seed = seed
+
+        total_channels = sum(self.extractor.channels.values())
+        n_dims = n_dims or _DEFAULT_N_DIMS.get(backbone, 550)
+        n_dims = min(n_dims, total_channels)
+        generator = torch.Generator().manual_seed(seed)
+        self.dim_idx = torch.randperm(total_channels, generator=generator)[:n_dims]
+
