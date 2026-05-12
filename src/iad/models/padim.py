@@ -69,3 +69,39 @@ class PaDiM(AnomalyModel):
         generator = torch.Generator().manual_seed(seed)
         self.dim_idx = torch.randperm(total_channels, generator=generator)[:n_dims]
 
+        # Learned statistics, filled by .fit().
+        self.mean: torch.Tensor | None = None
+        self.inv_cov: torch.Tensor | None = None
+        self.feat_hw: int | None = None
+
+    # ------------------------------------------------------------------ #
+    @torch.no_grad()
+    def _embed(self, images: torch.Tensor) -> torch.Tensor:
+        """Return concatenated, dim-reduced embeddings of shape ``(B, C, H, W)``."""
+        feats = self.extractor(images.to(self.device))
+        ref = feats[self.layers[0]]
+        target_hw = ref.shape[-2:]
+        parts = [ref]
+        for name in self.layers[1:]:
+            parts.append(
+                F.interpolate(feats[name], size=target_hw, mode="nearest")
+            )
+        embedding = torch.cat(parts, dim=1)
+        embedding = embedding[:, self.dim_idx, :, :]
+        return embedding
+
+    # ------------------------------------------------------------------ #
+    def fit(self, train_loader: DataLoader) -> "PaDiM":
+        embeddings = []
+        for batch in tqdm(train_loader, desc="PaDiM: embedding train set", leave=False):
+            emb = self._embed(batch["image"]).cpu()
+            embeddings.append(emb)
+        embeddings = torch.cat(embeddings, dim=0)  # (N, C, H, W)
+
+        n, c, h, w = embeddings.shape
+        self.feat_hw = h
+        # (HW, N, C)
+        embeddings = embeddings.permute(2, 3, 0, 1).reshape(h * w, n, c)
+
+        mean = embeddings.mean(dim=1)  # (HW, C)
+        centered = embeddings - mean.unsqueeze(1)
