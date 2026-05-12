@@ -85,3 +85,32 @@ class ConvAutoencoder(AnomalyModel):
             for batch in tqdm(
                 train_loader, desc=f"AE epoch {epoch + 1}/{self.epochs}", leave=False
             ):
+                images = batch["image"].to(self.device)
+                optimizer.zero_grad()
+                recon = self.decoder(self.encoder(images))
+                loss = F.mse_loss(recon, images)
+                loss.backward()
+                optimizer.step()
+                running += loss.item() * images.size(0)
+        self.encoder.eval()
+        self.decoder.eval()
+        return self
+
+    # ------------------------------------------------------------------ #
+    @torch.no_grad()
+    def predict(self, images: torch.Tensor) -> AnomalyPrediction:
+        images = images.to(self.device)
+        recon = self.decoder(self.encoder(images))
+        # Per-pixel L2 error across channels.
+        error = ((images - recon) ** 2).mean(dim=1)  # (B, H, W)
+        error = F.interpolate(
+            error.unsqueeze(1),
+            size=(self.image_size, self.image_size),
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(1)
+        score_map = gaussian_smooth(error, sigma=self.sigma)
+        image_scores = score_map.flatten(1).max(dim=1).values
+        return AnomalyPrediction(
+            image_scores=image_scores.cpu(), anomaly_maps=score_map.cpu()
+        )
