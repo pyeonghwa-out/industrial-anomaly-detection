@@ -105,3 +105,39 @@ class PaDiM(AnomalyModel):
 
         mean = embeddings.mean(dim=1)  # (HW, C)
         centered = embeddings - mean.unsqueeze(1)
+        cov = torch.einsum("pnc,pnd->pcd", centered, centered) / max(n - 1, 1)
+        identity = torch.eye(c).unsqueeze(0)
+        cov = cov + self.epsilon * identity
+
+        # Precompute inverse covariance once; reused for every test image.
+        self.inv_cov = torch.linalg.inv(cov).to(self.device)
+        self.mean = mean.to(self.device)
+        return self
+
+    # ------------------------------------------------------------------ #
+    @torch.no_grad()
+    def predict(self, images: torch.Tensor) -> AnomalyPrediction:
+        if self.mean is None or self.inv_cov is None:
+            raise RuntimeError("Call .fit() before .predict().")
+
+        emb = self._embed(images)  # (B, C, H, W)
+        b, c, h, w = emb.shape
+        emb = emb.permute(2, 3, 0, 1).reshape(h * w, b, c)  # (HW, B, C)
+
+        delta = emb - self.mean.unsqueeze(1)  # (HW, B, C)
+        # Mahalanobis^2 = delta^T Sigma^-1 delta, batched over positions & images.
+        left = torch.einsum("pbc,pcd->pbd", delta, self.inv_cov)
+        dist_sq = torch.einsum("pbd,pbd->pb", left, delta)  # (HW, B)
+        dist = torch.sqrt(dist_sq.clamp_min(0.0))
+
+        score_map = dist.reshape(h, w, b).permute(2, 0, 1)  # (B, H, W)
+        score_map = F.interpolate(
+            score_map.unsqueeze(1),
+            size=(self.image_size, self.image_size),
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(1)
+        score_map = gaussian_smooth(score_map, sigma=self.sigma)
+
+        image_scores = score_map.flatten(1).max(dim=1).values
+        return AnomalyPrediction(image_scores=image_scores.cpu(), anomaly_maps=score_map.cpu())
