@@ -79,3 +79,44 @@ class PatchCore(AnomalyModel):
             f = F.interpolate(f, size=ref_hw, mode="bilinear", align_corners=False)
             pooled.append(f)
         embedding = torch.cat(pooled, dim=1)  # (B, C, H, W)
+        b, c, h, w = embedding.shape
+        self.feat_hw = h
+        return embedding.permute(0, 2, 3, 1).reshape(b, h, w, c)
+
+    # ------------------------------------------------------------------ #
+    def fit(self, train_loader: DataLoader) -> "PatchCore":
+        patches = []
+        for batch in tqdm(train_loader, desc="PatchCore: building bank", leave=False):
+            pf = self._patch_features(batch["image"])  # (B, H, W, C)
+            patches.append(pf.reshape(-1, pf.shape[-1]).cpu())
+        bank = torch.cat(patches, dim=0)  # (N*H*W, C)
+
+        idx = self._sampler.sample(bank, ratio=self.coreset_ratio)
+        self.memory_bank = bank[idx].to(self.device)
+        self._nn = NearestNeighbors(self.memory_bank)
+        return self
+
+    # ------------------------------------------------------------------ #
+    @torch.no_grad()
+    def predict(self, images: torch.Tensor) -> AnomalyPrediction:
+        if self.memory_bank is None or self._nn is None:
+            raise RuntimeError("Call .fit() before .predict().")
+
+        pf = self._patch_features(images)  # (B, H, W, C)
+        b, h, w, c = pf.shape
+        queries = pf.reshape(-1, c)
+
+        dist, idx = self._nn.search(queries, k=1)  # (B*H*W, 1)
+        patch_scores = dist.squeeze(1).reshape(b, h, w)
+
+        # --- Image-level score with PatchCore's neighbourhood reweighting --- #
+        image_scores = self._reweighted_image_scores(
+            queries.reshape(b, h * w, c), patch_scores.reshape(b, h * w)
+        )
+
+        # --- Pixel-level anomaly map --- #
+        score_map = F.interpolate(
+            patch_scores.unsqueeze(1),
+            size=(self.image_size, self.image_size),
+            mode="bilinear",
+            align_corners=False,
