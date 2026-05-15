@@ -120,3 +120,44 @@ class PatchCore(AnomalyModel):
             size=(self.image_size, self.image_size),
             mode="bilinear",
             align_corners=False,
+        ).squeeze(1)
+        score_map = gaussian_smooth(score_map, sigma=self.sigma)
+
+        return AnomalyPrediction(
+            image_scores=image_scores.cpu(), anomaly_maps=score_map.cpu()
+        )
+
+    # ------------------------------------------------------------------ #
+    @torch.no_grad()
+    def _reweighted_image_scores(
+        self, queries: torch.Tensor, patch_scores: torch.Tensor
+    ) -> torch.Tensor:
+        """Eq. (7) of the PatchCore paper.
+
+        Down-weights the maximum patch score when the responsible memory point
+        lies in a *dense* region (its neighbours are close), and up-weights it in
+        sparse regions. This sharpens image-level separation.
+        """
+        bank = self.memory_bank
+        scores = []
+        for i in range(queries.shape[0]):
+            p_star = int(torch.argmax(patch_scores[i]).item())
+            s_star = patch_scores[i, p_star]
+            x_star = queries[i, p_star].unsqueeze(0)  # (1, C)
+
+            # Nearest memory point to the most anomalous test patch.
+            d_m, idx_m = self._nn.search(x_star, k=1)
+            m_star = bank[int(idx_m[0, 0].item())].unsqueeze(0)
+
+            # b nearest memory neighbours of m* (within the bank itself).
+            d_bank = torch.cdist(m_star, bank).squeeze(0)
+            nn_idx = torch.topk(d_bank, k=min(self.num_neighbors, bank.shape[0]),
+                                largest=False).indices
+            neighbours = bank[nn_idx]
+
+            # neighbours[0] is m* itself (nearest to itself), matching the
+            # numerator term exp(||x* - m*||) in Eq. (7).
+            dist_x_to_neighbours = torch.cdist(x_star, neighbours).squeeze(0)
+            weight = 1.0 - torch.softmax(dist_x_to_neighbours, dim=0)[0]
+            scores.append((weight * s_star).reshape(1))
+        return torch.cat(scores, dim=0)
