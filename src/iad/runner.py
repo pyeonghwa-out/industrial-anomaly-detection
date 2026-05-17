@@ -35,3 +35,41 @@ def build_model(config: Config, device: str):
 
 
 def make_loaders(config: Config, category: str):
+    data = config.get("data", {})
+    root = data["root"]
+    resize = data.get("resize", 256)
+    crop = data.get("crop", 224)
+    batch_size = data.get("batch_size", 8)
+    workers = data.get("num_workers", 2)
+
+    train_ds = MVTecDataset(root, category, "train", resize, crop)
+    test_ds = MVTecDataset(root, category, "test", resize, crop)
+    train_loader = DataLoader(
+        train_ds, batch_size=batch_size, shuffle=False, num_workers=workers
+    )
+    test_loader = DataLoader(
+        test_ds, batch_size=batch_size, shuffle=False, num_workers=workers
+    )
+    return train_loader, test_loader
+
+
+def run_experiment(config: Config, category: str, device: str | None = None) -> Dict[str, float]:
+    """Fit on a category's good images and evaluate on its test split.
+
+    Returns a metrics dict augmented with ``fit_seconds`` and the category name.
+    """
+    set_seed(config.get("seed", 42))
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+    train_loader, test_loader = make_loaders(config, category)
+    model = build_model(config, device)
+
+    t0 = time.perf_counter()
+    model.fit(train_loader)
+    fit_seconds = time.perf_counter() - t0
+
+    metrics = evaluate(model, test_loader, compute_pro_metric=config.get("compute_pro", True))
+    metrics["category"] = category
+    metrics["method"] = config["method"]
+    metrics["fit_seconds"] = fit_seconds
+    return metrics
