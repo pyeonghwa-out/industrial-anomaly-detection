@@ -35,3 +35,41 @@ def compute_pro(
     for i in range(masks.shape[0]):
         if masks[i].sum() == 0:
             continue
+        labelled = cc_label(masks[i])
+        for region_id in range(1, labelled.max() + 1):
+            regions.append((i, labelled == region_id))
+
+    if not regions:
+        return float("nan")
+
+    inverse_masks = 1 - masks  # defect-free pixels, for FPR
+    n_normal_pixels = inverse_masks.sum()
+
+    lo, hi = float(maps.min()), float(maps.max())
+    thresholds = np.linspace(lo, hi, num_thresholds)
+
+    pros, fprs = [], []
+    for thr in thresholds:
+        binary = maps >= thr
+
+        # Mean per-region true-positive overlap.
+        overlaps = [
+            (binary[i] & region).sum() / region.sum() for i, region in regions
+        ]
+        pros.append(float(np.mean(overlaps)))
+
+        # False positive rate on defect-free pixels.
+        fp = (binary & inverse_masks.astype(bool)).sum()
+        fprs.append(fp / n_normal_pixels if n_normal_pixels > 0 else 0.0)
+
+    fprs = np.asarray(fprs)
+    pros = np.asarray(pros)
+
+    # Keep the portion of the curve below the FPR limit and integrate.
+    order = np.argsort(fprs)
+    fprs, pros = fprs[order], pros[order]
+    keep = fprs <= fpr_limit
+    if keep.sum() < 2:
+        return float("nan")
+    fprs_k, pros_k = fprs[keep], pros[keep]
+    return float(auc(fprs_k, pros_k) / fpr_limit)
