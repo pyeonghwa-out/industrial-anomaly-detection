@@ -61,3 +61,35 @@ def main() -> None:
             f"PRO={metrics.get('pro', float('nan')):.3f}  "
             f"{metrics['inference_ms_per_image']:.1f} ms/img"
         )
+
+    df = pd.DataFrame(rows)
+    # Append a mean row across categories.
+    mean_row = df.select_dtypes("number").mean(numeric_only=True)
+    mean_row["category"] = "MEAN"
+    mean_row["method"] = method
+    df = pd.concat([df, pd.DataFrame([mean_row])], ignore_index=True)
+
+    out_dir = Path(args.output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = out_dir / f"{method}_results.csv"
+    md_path = out_dir / f"{method}_results.md"
+    df.to_csv(csv_path, index=False)
+
+    show_cols = ["category", "image_auroc", "pixel_auroc", "pro", "inference_ms_per_image"]
+    show_cols = [c for c in show_cols if c in df.columns]
+
+    # Pretty Markdown needs the optional `tabulate` package; fall back to a plain
+    # text table if it isn't installed so a long run never dies at the last step.
+    try:
+        table = df[show_cols].to_markdown(index=False, floatfmt=".3f")
+    except ImportError:
+        table = df[show_cols].round(3).to_string(index=False)
+        print("[note] install 'tabulate' (pip install tabulate) for Markdown-formatted tables.")
+    md_path.write_text(table)
+
+    print(f"\nSaved:\n  {csv_path}\n  {md_path}")
+    print("\n" + table)
+
+
+if __name__ == "__main__":
+    main()
