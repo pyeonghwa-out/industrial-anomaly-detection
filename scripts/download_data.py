@@ -82,3 +82,45 @@ def materialize_category(category: str, root: Path) -> None:
 
     n_train = len(list((cat_dir / "train" / "good").glob("*.png")))
     n_test = len(list((cat_dir / "test").rglob("*.png")))
+    print(f"[done] {category}: {n_train} train (good) + {n_test} test images")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Download MVTec AD via a public Hugging Face mirror.")
+    parser.add_argument(
+        "--root",
+        default="./data/mvtec_ad",
+        help="Directory that will hold the 15 category sub-folders.",
+    )
+    parser.add_argument(
+        "--categories",
+        nargs="*",
+        default=None,
+        help="Subset of categories to download (default: all 15).",
+    )
+    args = parser.parse_args()
+
+    try:
+        import datasets  # noqa: F401
+    except ImportError:
+        raise SystemExit(
+            "This downloader needs the 'datasets' package:\n"
+            "    pip install datasets pillow\n"
+            "(both are listed in requirements.txt)."
+        )
+
+    root = Path(args.root)
+    categories = args.categories or MVTEC_CATEGORIES
+    unknown = [c for c in categories if c not in MVTEC_CATEGORIES]
+    if unknown:
+        raise SystemExit(f"Unknown categories {unknown}. Choose from {MVTEC_CATEGORIES}.")
+
+    print(f"Downloading {len(categories)} categories into {root.resolve()}")
+    for category in categories:
+        materialize_category(category, root)
+
+    print(f"\n[all done] MVTec AD ready under: {root.resolve()}")
+
+
+if __name__ == "__main__":
+    main()
