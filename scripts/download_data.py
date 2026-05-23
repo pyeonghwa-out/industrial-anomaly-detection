@@ -40,3 +40,45 @@ MVTEC_CATEGORIES = [
     "pill", "screw", "toothbrush", "transistor", "zipper",
     "carpet", "grid", "leather", "tile", "wood",
 ]
+
+
+def _save_png(image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path)
+
+
+def _already_done(cat_dir: Path) -> bool:
+    good = cat_dir / "train" / "good"
+    return good.is_dir() and any(good.glob("*.png"))
+
+
+def materialize_category(category: str, root: Path) -> None:
+    """Download one category from the HF mirror and write the MVTec layout."""
+    from datasets import load_dataset
+
+    cat_dir = root / category
+    if _already_done(cat_dir):
+        print(f"[skip] {category} already present.")
+        return
+
+    for split in ("train", "test"):
+        print(f"[download] {category}.{split} from {HF_REPO} ...")
+        ds = load_dataset(HF_REPO, split=f"{category}.{split}")
+        counters: dict[str, int] = {}
+        for ex in ds:
+            label = int(ex["label"])
+            defect = ex.get("defect") or ("good" if label == 0 else "anomaly")
+            stem = f"{counters.get(defect, 0):04d}"
+            counters[defect] = counters.get(defect, 0) + 1
+
+            _save_png(ex["image_path"].convert("RGB"),
+                      cat_dir / split / defect / f"{stem}.png")
+
+            if split == "test" and label != 0:
+                mask = ex.get("mask_path")
+                if mask is not None:
+                    _save_png(mask.convert("L"),
+                              cat_dir / "ground_truth" / defect / f"{stem}_mask.png")
+
+    n_train = len(list((cat_dir / "train" / "good").glob("*.png")))
+    n_test = len(list((cat_dir / "test").rglob("*.png")))
