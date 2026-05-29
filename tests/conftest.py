@@ -24,3 +24,29 @@ def _save(path: Path, array: np.ndarray) -> None:
 
 
 @pytest.fixture(scope="session")
+def synthetic_root(tmp_path_factory) -> Path:
+    """Create a 'bottle' category with good train + good/defect test images."""
+    rng = np.random.default_rng(0)
+    root = tmp_path_factory.mktemp("mvtec")
+    cat = root / "bottle"
+
+    # Train: 6 good images (smooth grey with mild noise).
+    for i in range(6):
+        img = (np.full((64, 64, 3), 128) + rng.integers(-10, 10, (64, 64, 3))).clip(0, 255)
+        _save(cat / "train" / "good" / f"{i:03d}.png", img.astype(np.uint8))
+
+    # Test good: 3 images.
+    for i in range(3):
+        img = (np.full((64, 64, 3), 128) + rng.integers(-10, 10, (64, 64, 3))).clip(0, 255)
+        _save(cat / "test" / "good" / f"{i:03d}.png", img.astype(np.uint8))
+
+    # Test defect: 3 images with a bright square, plus matching masks.
+    for i in range(3):
+        img = (np.full((64, 64, 3), 128) + rng.integers(-10, 10, (64, 64, 3))).clip(0, 255)
+        mask = np.zeros((64, 64), dtype=np.uint8)
+        img[20:40, 20:40, :] = 255
+        mask[20:40, 20:40] = 255
+        _save(cat / "test" / "broken" / f"{i:03d}.png", img.astype(np.uint8))
+        _save(cat / "ground_truth" / "broken" / f"{i:03d}_mask.png", mask)
+
+    return root
