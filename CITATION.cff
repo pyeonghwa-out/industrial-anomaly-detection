@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite it as below."
+title: "Unsupervised Industrial Anomaly Detection & Localization on MVTec AD"
+abstract: >-
+  A benchmark of training-free deep-learning methods (PatchCore, PaDiM) and a
+  convolutional autoencoder baseline for unsupervised anomaly detection and
+  pixel-level localization on the MVTec AD dataset.
+authors:
+  - family-names: SHARANcanCODE
+type: software
+license: MIT
+keywords:
+  - anomaly-detection
+  - computer-vision
+  - mvtec-ad
+  - patchcore
+  - padim
+  - industrial-inspection
+references:
+  - type: article
