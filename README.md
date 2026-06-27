@@ -51,3 +51,57 @@ pip install -e ".[dev]" && pytest                  # unit tests use synthetic da
 ```
 
 Prefer zero local setup? Open
+[`notebooks/00_colab_selftest_capsule.ipynb`](notebooks/00_colab_selftest_capsule.ipynb)
+in Google Colab, set **Runtime → T4 GPU**, then **Run all**. Full details, more
+options, and dataset sources are in [Quickstart](#quickstart) below.
+
+---
+
+## Results
+
+### Full benchmark — PatchCore across all 15 categories (free Colab T4 GPU)
+
+Reproduced end-to-end with this repository's code on a real Tesla T4: training-free
+PatchCore (WideResNet50, layers 2+3, **1% coreset**, 224 px) over **all 15 MVTec AD
+categories**. Mean **image AUROC 0.986** / **pixel AUROC 0.977** — squarely in the
+published PatchCore range, from a memory bank holding just 1 % of patches. Full
+notebook: [`notebooks/03_full_benchmark_all_categories.ipynb`](notebooks/03_full_benchmark_all_categories.ipynb).
+
+<p align="center">
+  <img src="results/figures/patchcore_results.png" alt="PatchCore image and pixel AUROC across all 15 MVTec AD categories" width="92%"/>
+</p>
+
+| Category | Image | Pixel | | Category | Image | Pixel |
+|---|:--:|:--:|:-:|---|:--:|:--:|
+| bottle | 1.000 | 0.983 | | pill | 0.957 | 0.976 |
+| cable | 0.987 | 0.984 | | screw | 0.930 | 0.976 |
+| capsule | 0.969 | 0.987 | | tile | 0.986 | 0.955 |
+| carpet | 0.991 | 0.988 | | toothbrush | 1.000 | 0.986 |
+| grid | 0.980 | 0.967 | | transistor | 1.000 | 0.976 |
+| hazelnut | 1.000 | 0.984 | | wood | 0.993 | 0.940 |
+| leather | 1.000 | 0.991 | | zipper | 0.995 | 0.982 |
+| metal_nut | 0.998 | 0.984 | | **MEAN** | **0.986** | **0.977** |
+
+The pipeline also produces a 4-panel **heatmap gallery** — each row is
+**input · ground-truth mask · anomaly heatmap · overlay** — where the predicted
+hotspots overlap the ground-truth defect regions tightly:
+
+<p align="center">
+  <img src="results/figures/capsule_patchcore.png" alt="PatchCore anomaly heatmaps on the capsule category" width="85%"/>
+</p>
+
+Generate it (writes `results/figures/capsule_patchcore.png`):
+
+```bash
+# Fast, CPU-friendly (ResNet18, 1% coreset) — a minute or two:
+python scripts/generate_figures.py --config configs/patchcore_fast.yaml \
+    --category capsule --root ./data/mvtec_ad
+
+# Full quality (WideResNet50, 10% coreset) — best on a GPU / Colab:
+python scripts/generate_figures.py --config configs/patchcore.yaml \
+    --category capsule --root ./data/mvtec_ad
+```
+
+### Published reference targets (mean over 15 categories)
+
+PatchCore and PaDiM are deterministic given a fixed seed, so a full-benchmark run
