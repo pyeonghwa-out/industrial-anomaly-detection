@@ -105,3 +105,57 @@ python scripts/generate_figures.py --config configs/patchcore.yaml \
 ### Published reference targets (mean over 15 categories)
 
 PatchCore and PaDiM are deterministic given a fixed seed, so a full-benchmark run
+with this code should land within the ranges reported in the original papers.
+These serve as the expected values when you run `scripts/run_benchmark.py`:
+
+| Method (WideResNet50) | Image AUROC | Pixel AUROC | PRO | Source |
+|---|:--:|:--:|:--:|---|
+| **PatchCore** (10% coreset) | ≈ 0.991 | ≈ 0.981 | ≈ 0.935 | Roth et al., 2022 |
+| **PaDiM** | ≈ 0.955–0.979 | ≈ 0.975 | ≈ 0.921 | Defard et al., 2021 |
+| Conv autoencoder (SSIM/L2) | ≈ 0.70–0.85 | ≈ 0.85–0.90 | ≈ 0.70 | Bergmann et al., 2019 |
+
+The chart above is produced from a benchmark run with two commands —
+`run_benchmark.py` writes the per-category table to `results/runs/<method>_results.md`
+(and `.csv`), and `plot_results.py` turns it into the figure:
+
+```bash
+python scripts/run_benchmark.py --config configs/patchcore.yaml --root ./data/mvtec_ad
+python scripts/plot_results.py  --csv results/runs/patchcore_results.csv \
+    --out results/figures/patchcore_results.png
+```
+
+`run_benchmark.py` also reports the PRO score and per-image inference time. (The
+default `patchcore.yaml` uses a 10 % coreset and lands a touch higher, near the
+published 0.991; the chart above uses 1 % to show how little accuracy that costs.)
+
+---
+
+## Methods
+
+All three methods share a frozen ImageNet backbone for feature extraction; the
+first two are completely training-free (no gradient steps at all).
+
+| Method | Reference model | Trains? | Core idea |
+|---|---|---|---|
+| **PatchCore** | coreset memory bank | no | Store a representative subset of *good* patch features; score a test patch by its nearest-neighbour distance to that bank. |
+| **PaDiM** | per-patch Gaussian | no | Fit a multivariate Gaussian per spatial position from good images; score by Mahalanobis distance. |
+| **Autoencoder** | conv AE | yes (small) | Learn to reconstruct good images; score by per-pixel reconstruction error. |
+
+**PatchCore** (Roth et al., CVPR 2022) extracts mid-level features (`layer2`,
+`layer3`), aggregates each location with its 3×3 neighbourhood, and keeps a
+**coreset** — a greedy k-center subsample (1–10%) of all training patches — as a
+memory bank. A test patch's anomaly score is its Euclidean distance to the nearest
+memory entry; the image score is the (reweighted) maximum patch distance.
+
+**PaDiM** (Defard et al., ICPR 2021) concatenates features from `layer1–3`, keeps a
+random subset of channels, and models every patch position with its own Gaussian
+`N(μ_ij, Σ_ij)` estimated from the good set. The anomaly score is the Mahalanobis
+distance to that position's distribution.
+
+Both produce a coarse patch-level score map that is bilinearly upsampled to the
+input resolution and Gaussian-smoothed (σ = 4) to yield the final heatmap.
+
+---
+
+## Why it matters for German manufacturing
+
