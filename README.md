@@ -159,3 +159,57 @@ input resolution and Gaussian-smoothed (σ = 4) to yield the final heatmap.
 
 ## Why it matters for German manufacturing
 
+Visual quality inspection is one of the highest-value computer-vision problems in
+the German industrial base — automotive (Bosch, ZF, Continental), machine tooling,
+electronics, pharma and medtech all run high-throughput optical inspection lines.
+The constraint on the factory floor is always the same: **defects are rare, diverse
+and expensive to label.** You cannot collect thousands of examples of every scratch,
+dent, contamination or misprint before a line goes live.
+
+Training-free, unsupervised methods invert the problem — you model only what a *good*
+part looks like, of which there is an abundance, and flag anything that deviates.
+MVTec AD, released by Munich-based **MVTec Software GmbH**, is the de-facto benchmark
+for exactly this setting. This project demonstrates the full pipeline: detection,
+pixel-level localization, rigorous evaluation, and the engineering trade-offs that
+matter in production (accuracy vs. memory vs. latency).
+
+---
+
+## Repository structure
+
+```
+industrial-anomaly-detection/
+├── src/iad/                 # installable package (pip install -e .)
+│   ├── datasets/            # MVTec AD loader (train = good; test = good + defect + masks)
+│   ├── models/              # feature_extractor · patchcore · padim · autoencoder
+│   ├── metrics/             # image / pixel AUROC · PRO · evaluate()
+│   ├── utils/               # seed · YAML config · gaussian smoothing · coreset sampler
+│   ├── visualize/           # heatmap overlays + 4-panel comparison grids
+│   └── runner.py            # config -> fitted model -> metrics
+├── configs/                 # one YAML per experiment (inherits default.yaml)
+├── scripts/                 # download_data · run_benchmark · generate_figures · plot_results
+├── notebooks/               # 00 Colab self-test · 01 quickstart · 02 full benchmark
+├── tests/                   # unit tests for loaders, metrics, scoring (synthetic data)
+├── results/                 # metrics tables + example figures
+└── docs/                    # pipeline diagram
+```
+
+---
+### Dataset
+
+MVTec AD is © MVTec Software GmbH (CC BY-NC-SA 4.0, free for non-commercial use).
+MVTec rotated its official download link, so `scripts/download_data.py` now pulls
+the dataset from a public, **ungated Hugging Face mirror**
+(`TheoM55/mvtec_all_objects_split`, all 15 categories with images, masks and named
+defect types) and writes it into the standard MVTec folder layout automatically —
+no Hugging Face account or token required:
+
+```bash
+python scripts/download_data.py --root ./data/mvtec_ad                 # all 15 (~5.3 GB)
+python scripts/download_data.py --root ./data/mvtec_ad --categories capsule bottle
+```
+
+On **Kaggle** you can instead add the *MVTec AD* dataset to your notebook and skip
+the download by passing `--root /kaggle/input/mvtec-ad` to the benchmark scripts.
+
+---
